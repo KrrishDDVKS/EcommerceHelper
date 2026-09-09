@@ -4,4 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "langsmith>=0.0.92",
+    "langsmith-wrappers>=0.0.1",
+    "openai>=3.11.0",
+]

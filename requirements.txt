@@ -1,3 +1,4 @@
 openai
 langsmith
 langsmith.wrappers
+langchain

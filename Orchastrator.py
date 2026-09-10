@@ -1,37 +1,59 @@
-from langchain.schema import HumanMessage
-from openai import AsyncOpenAI
-from langsmith import traceable
-from langsmith.wrappers import wrap_openai
-from langchain.tools import tool
-import os
-from Sales import sales_agent
-from Inventory import inventory_agent
-from Insight import insight_agent
+import Insight
+#from Sales import Sales_agent
+from Inventory import Inventory_agent
+#from Insight import Insight_agent
 
-# Initialize OpenAI client with LangSmith wrapper
-client = wrap_openai(AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY")))
+import os
+from langchain.messages import HumanMessage
+
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
     
 @tool
 def sales_agent(x: float) -> float:
-    """Call subagent 1 in order to calculate the square root of a number"""
-    response = SalesAgent.invoke({"messages": [HumanMessage(content=f"Calculate the square root of {x}")]})
+    """Call sales agent in order to to insert sales data into the database in Sales table"""
+    response = Sales_agent.invoke({"messages": [HumanMessage(content=f"Insert sales data for {x}")]})
     return response["messages"][-1].content
 
 @tool
 def inventory_agent(x: float) -> float:
-    """Call subagent 2 in order to calculate the square of a number"""
-    response = InventoryAgent.invoke({"messages": [HumanMessage(content=f"Calculate the square of {x}")]})
+    """Call inventory agent in order to insert inventory data into the database in Inventory table"""
+    response = Inventory_agent.invoke({"messages": [HumanMessage(content=f"Insert inventory data for {x}")]})
     return response["messages"][-1].content
 
 @tool
 def insight_agent(x: float) -> float:
-    """Call subagent 3 in order to provide insights about a number"""
-    response = InsightAgent.invoke({"messages": [HumanMessage(content=f"Provide insights about {x}")]})
+    """Call insight agent in order to provide insights about the sales and inventory data in the database"""
+    response = Insight_agent.invoke({"messages": [HumanMessage(content=f"Provide insights about {x}")]})
     return response["messages"][-1].content
 
 ## Creating the main agent
+system_prompt = """
+You are an E-commerce Assistant system managing SQLite tables: `sales` and `inventory`.
+
+Database Schema:
+1. `sales` table: sales_id (INTEGER PK), item (TEXT), count (INTEGER), total_price (REAL), date (TEXT)
+2. `inventory` table: item_id (INTEGER PK), item (TEXT UNIQUE), count (INTEGER), price_per_item (REAL), date (TEXT)
+
+Rules based on User Role:
+- **Sales Agent / Customer**: Call `record_sale_tool`. Calculate `total_price = count * unit_price` if needed.
+- **Inventory Agent / Supply**: Call `add_inventory_tool`.
+- **Manager / Admin**: Call `execute_sql_analytics_tool`. You MUST construct a valid SELECT SQL query AND provide standalone Matplotlib python plotting code to visualize the data.
+
+Always pick the correct tool based on user role and query context.
+"""
 
 main_agent = create_agent(
     model='gpt-5-nano',
     tools=[sales_agent, inventory_agent, insight_agent],
-    system_prompt="You are a helpful assistant who can call subagents to calculate the square root or square of a number.")
+    system_prompt=system_prompt)
+
+question = HumanMessage(content="""
+I want to add 5 apples of $1.50.
+""")
+
+response = main_agent.invoke(
+{"messages": [question]}
+)
+print(response['messages'][-1].content)

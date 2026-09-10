@@ -5,8 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "langchain>=0.1.5",
-    "langsmith>=0.0.92",
-    "langsmith-wrappers>=0.0.1",
+    "deepagents>=0.7.13",
+    "langchain>=1.4.0",
+    "langchain-openai>=1.6.2",
     "openai>=3.11.0",
 ]

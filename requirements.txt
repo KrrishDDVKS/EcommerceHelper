@@ -1,4 +1,4 @@
-openai
-langsmith
-langsmith.wrappers
 langchain
+langchain_openai
+langchain
+deepagents

@@ -95,17 +95,17 @@ def main():
 
     conn = sqlite3.connect("ecommerce.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        Drop table if exists sales;
-    """)
+    # cursor.execute("""
+    #     Drop table if exists sales;
+    # """)
 
-    cursor.execute("""
-            Drop table if exists lookup_items;
-         """)    
+    # cursor.execute("""
+    #         Drop table if exists lookup_items;
+    #      """)    
 
-    cursor.execute("""
-             Drop table if exists inventory;
-         """)
+    # cursor.execute("""
+    #          Drop table if exists inventory;
+    #      """)
     
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sales (

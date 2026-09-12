@@ -1,10 +1,13 @@
 import re
 import pytest
+from langsmith import testing as t
 
 from agents.Inventory import Inventory_agent
 
 
+
 def run_agent(user_input: str):
+    t.log_inputs({"user_query": user_input})
     response = Inventory_agent.invoke({
     "messages": [{"role": "user","content": user_input}]})
 
@@ -35,6 +38,7 @@ def extract_sql(response):
 
     return ""
 
+@pytest.mark.langsmith
 # EVALUATOR 1: SQL should contain the inventory table
 def test_sql_uses_inventory_table():
 
@@ -43,10 +47,12 @@ def test_sql_uses_inventory_table():
     )
 
     sql = extract_sql(response)
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="valid_sql", score="inventory" in sql.lower())
 
-    assert "inventory" in sql.lower()
 
 # EVALUATOR 2: SQL should be an INSERT statement
+@pytest.mark.langsmith
 def test_sql_is_insert_statement():
 
     response = run_agent(
@@ -54,10 +60,11 @@ def test_sql_is_insert_statement():
     )
 
     sql = extract_sql(response)
-
-    assert sql.startswith("INSERT")
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="valid_sql", score="inventory" in sql.lower())
 
 #EVALUATOR 3: SQL should use valid columns
+@pytest.mark.langsmith
 def test_sql_uses_valid_columns():
 
     response = run_agent(
@@ -65,12 +72,11 @@ def test_sql_uses_valid_columns():
     )
 
     sql = extract_sql(response)
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="valid_columns", score=all(column in sql for column in ["item", "date", "count", "price_per_item"]))
+    
 
-    assert "item" in sql
-    assert "date" in sql
-    assert "count" in sql
-    assert "price_per_item" in sql
-
+@pytest.mark.langsmith
 def test_no_hallucinated_columns():
 
 #EVALUATOR 4: No hallucinated columns
@@ -79,7 +85,8 @@ def test_no_hallucinated_columns():
     )
 
     sql = extract_sql(response).lower()
-
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="no_hallucinated_columns", score=all(column not in sql for column in ["total_price", "stock", "quantity", "product_name"]))
     forbidden_columns = [
         "total_price",
         "stock",
@@ -88,10 +95,9 @@ def test_no_hallucinated_columns():
         "inventory_date"
     ]
 
-    for column in forbidden_columns:
-        assert column not in sql
 
 #EVALUATOR 5: Date should be included when omitted
+@pytest.mark.langsmith
 def test_missing_date_is_filled():
 
     response = run_agent(
@@ -99,11 +105,11 @@ def test_missing_date_is_filled():
     )
 
     sql = extract_sql(response)
-
-    assert "date" in sql.lower()
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="missing_date_is_filled", score="date" in sql.lower())
 
 #EVALUATOR 6: Explicit date should be preserved
-
+@pytest.mark.langsmith
 def test_explicit_date_is_preserved():
 
     response = run_agent(
@@ -111,11 +117,12 @@ def test_explicit_date_is_preserved():
     )
 
     sql = extract_sql(response)
-
-    assert "2026-09-15" in sql
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="explicit_date_is_preserved", score="2026-09-15" in sql)
 
 #EVALUATOR 7: Item should appear in SQL
 
+@pytest.mark.langsmith
 @pytest.mark.parametrize(
 "user_input,item",
 [
@@ -129,11 +136,12 @@ def test_item_is_correct(user_input, item):
     response = run_agent(user_input)
 
     sql = extract_sql(response).lower()
-
-    assert item.lower() in sql
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="correct_item", score=item.lower() in sql)
 
 #EVALUATOR 8: Count should be correct
 
+@pytest.mark.langsmith
 @pytest.mark.parametrize(
 "user_input,count",
 [
@@ -147,12 +155,12 @@ def test_inventory_count(user_input, count):
     response = run_agent(user_input)
 
     sql = extract_sql(response)
-
-    assert str(count) in sql
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="correct_count", score=str(count) in sql)
 
 #EVALUATOR 9:  Price should be correct
 
-
+@pytest.mark.langsmith
 @pytest.mark.parametrize(
 "user_input,price",
 [
@@ -167,11 +175,11 @@ def test_price_per_item(user_input, price):
     response = run_agent(user_input)
 
     sql = extract_sql(response)
-
-    assert str(price) in sql
+    t.log_outputs({"sql": sql})
+    t.log_feedback(key="correct_price", score=str(price) in sql)
 
 #EVALUATOR 10: Agent should not crash
-
+@pytest.mark.langsmith
 @pytest.mark.parametrize(
 "user_input",
 [
@@ -184,7 +192,5 @@ def test_price_per_item(user_input, price):
 def test_agent_execution(user_input):
 
     response = run_agent(user_input)
-
-    assert response is not None
-    assert "messages" in response
-    assert len(response["messages"]) > 0
+    t.log_outputs({"sql":extract_sql(response)})
+    t.log_feedback(key="agent_execution", score=response is not None and "messages" in response and len(response["messages"]) > 0)

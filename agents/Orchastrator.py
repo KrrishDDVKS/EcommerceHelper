@@ -1,20 +1,26 @@
-#from Sales import Sales_agent
-from agents.Inventory import Inventory_agent
-#from Insight import Insight_agent
-
 import os
+import sqlite3
 
+from langgraph import graph
+from openai.types import Image
+
+from Sales import Ext_agent
+from Inventory import Inventory_agent
+from Insight import Insight_agent
+
+from langchain_openai import ChatOpenAI
 from langchain.messages import HumanMessage
 from langchain.agents import create_agent
-from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 
-from langsmith import evaluate
-    
+from IPython.display import Image, display
+
+DB_NAME = "ecommerce.db"
+
 @tool
 def sales_agent(x: str) -> str:
     """Call sales agent in order to buy some items and insert sales data to the database in Sales table"""
-    response = Sales_agent.invoke({"messages": [HumanMessage(content=f"Insert sales data")]})
+    response = Ext_agent.invoke({"messages": [HumanMessage(content=f"Insert sales data")]})
     return response["messages"][-1].content
 
 @tool
@@ -41,13 +47,20 @@ Rules based on User Role:
 Always pick the correct tool based on user role and query context.
 """
 
+llm = ChatOpenAI(
+    model="gpt-5-nano",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0
+)
+    
 main_agent = create_agent(
-    model='gpt-5-nano',
+    model=llm,
     tools=[sales_agent, inventory_agent, insight_agent],
     system_prompt=system_prompt)
 
+display(Image(main_agent.get_graph().draw_mermaid_png()))
 # question = HumanMessage(content="""
-# I want to add 5 apples of $1.50.
+# I want to buy 5 apple of $1.50.
 # """)
 
 # response = main_agent.invoke(

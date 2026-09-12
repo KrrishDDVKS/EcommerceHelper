@@ -4,3 +4,6 @@ langchain
 deepagents
 pytest
 pandas
+streamlit
+IPython
+dotenv

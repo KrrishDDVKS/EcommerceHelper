@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "deepagents>=0.7.13",
+    "dotenv>=0.9.9",
+    "ipython>=9.17.1",
     "langchain>=1.4.0",
     "langchain-openai>=1.6.2",
-    "openai>=3.11.0",
     "pandas>=3.0.5",
     "pytest>=9.1.1",
+    "streamlit>=1.63.0",
 ]

@@ -393,18 +393,18 @@ initial_state = {
 }
 
 
-question = HumanMessage(
-    content="I want to buy 3 apple."
-)
+# question = HumanMessage(
+#     content="I want to buy 3 apple."
+# )
 
 
-response = Ext_agent.invoke(
-    {
-        "messages": [question],
-        "insert_count": 0
-    }
-)
+# response = Ext_agent.invoke(
+#     {
+#         "messages": [question],
+#         "insert_count": 0
+#     }
+# )
 
 
-print("\nFinal Response:")
-print(response["messages"][-1].content)
+# print("\nFinal Response:")
+# print(response["messages"][-1].content)

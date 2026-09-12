@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "Ecommerce": "./agents/Orchastrator.py:graph",
+    "Inventory": "./agents/Inventory.py:graph",
+    "Sales": "./agents/Sales.py:graph",
+    "Insight": "./agents/Insight.py:graph"
+  },
+  "env": ".env"
+}

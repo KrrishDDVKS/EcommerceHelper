@@ -50,6 +50,7 @@ def execute_sql(query: str, state: AgentState) -> str:
     Use this tool only after generating a valid SQL query. 
     The tool is used to insert data to the database.
     """
+    
     if state["insert_count"] >= 1:
         return "INSERT BLOCKED: Only one inventory insertion is allowed per request."
     
@@ -110,13 +111,13 @@ Inventory_agent = create_agent(
 # 4. Run agent
 # -------------------------------------------
 
-question = HumanMessage(content="""
- I want to add 5 apple of $1.50.
- """)
+# question = HumanMessage(content="""
+#  I want to add 5 apple of $1.50.
+#  """)
 
 
-response = Inventory_agent.invoke(
-{"messages": [question]}
-)
-print(response['messages'][-1].content)
+# response = Inventory_agent.invoke(
+# {"messages": [question]}
+# )
+# print(response['messages'][-1].content)
 #_____________________________________________________________

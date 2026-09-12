@@ -4,7 +4,7 @@ import sqlite3
 from langgraph import graph
 from openai.types import Image
 
-from Sales import Ext_agent
+#from Sales import Ext_agent
 from Inventory import Inventory_agent
 from Insight import Insight_agent
 
@@ -17,11 +17,11 @@ from IPython.display import Image, display
 
 DB_NAME = "ecommerce.db"
 
-@tool
-def sales_agent(x: str) -> str:
-    """Call sales agent in order to buy some items and insert sales data to the database in Sales table"""
-    response = Ext_agent.invoke({"messages": [HumanMessage(content=f"Insert sales data")]})
-    return response["messages"][-1].content
+# @tool
+# def sales_agent(x: str) -> str:
+#     """Call sales agent in order to buy some items and insert sales data to the database in Sales table"""
+#     response = Ext_agent.invoke({"messages": [HumanMessage(content=f"Insert sales data")]})
+#     return response["messages"][-1].content
 
 @tool
 def inventory_agent(x: str) -> str:
@@ -55,7 +55,7 @@ llm = ChatOpenAI(
     
 main_agent = create_agent(
     model=llm,
-    tools=[sales_agent, inventory_agent, insight_agent],
+    tools=[inventory_agent, insight_agent],#sales_agent,
     system_prompt=system_prompt)
 
 display(Image(main_agent.get_graph().draw_mermaid_png()))

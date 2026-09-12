@@ -2,3 +2,5 @@ langchain
 langchain_openai
 langchain
 deepagents
+pytest
+pandas

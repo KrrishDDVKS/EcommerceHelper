@@ -274,33 +274,33 @@ Insight_agent = create_agent(
 
 # Local development test
 
-# if __name__ == "__main__":
-#     manager_response = Insight_agent.invoke(
-#         {
-#             "messages": [
-#                 {
-#                     "role": "user",
-#                     "content": "How many apples are there?",
-#                 }
-#             ]
-#         },
-#         context=InsightContext(user_role="manager"),
-#     )
+if __name__ == "__main__":
+    manager_response = Insight_agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "How many apples are there?",
+                }
+            ]
+        },
+        context=InsightContext(user_role="manager"),
+    )
 
-#     print("\nMANAGER INVENTORY TEST")
-#     print(manager_response["messages"][-1].content)
+    print("\nMANAGER INVENTORY TEST")
+    print(manager_response["messages"][-1].content)
 
-#     customer_response = Insight_agent.invoke(
-#         {
-#             "messages": [
-#                 {
-#                     "role": "user",
-#                     "content": "Show me the previous apple sales.",
-#                 }
-#             ]
-#         },
-#         context=InsightContext(user_role="customer"),
-#     )
+    customer_response = Insight_agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Show me the previous apple sales.",
+                }
+            ]
+        },
+        context=InsightContext(user_role="customer"),
+    )
 
-#     print("\nCUSTOMER SALES AUTHORIZATION TEST")
-#     print(customer_response["messages"][-1].content)
+    print("\nCUSTOMER SALES AUTHORIZATION TEST")
+    print(customer_response["messages"][-1].content)

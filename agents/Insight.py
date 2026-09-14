@@ -2,18 +2,29 @@ from dataclasses import dataclass
 import json
 import os
 import sqlite3
+from pathlib import Path
+import re
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 load_dotenv()
 
 DB_NAME = os.getenv("ECOMMERCE_DB_PATH", "ecommerce.db")
+CHART_DIR = Path(
+    os.getenv("ECOMMERCE_CHART_DIR", "charts")
+)
 
-llm = ChatOpenAI(
-    model="gpt-5-nano",
+# llm = ChatOpenAI(
+#     model="gpt-5-nano",
+#     temperature=0,
+# )
+
+llm = ChatOllama(
+    model="llama3.1:8b",
     temperature=0,
 )
 
@@ -75,6 +86,214 @@ def _item_variants(item: str) -> tuple[str, str]:
 
     return singular, plural
 
+def _build_sales_filters(
+    item: str = "",
+    start_date: str = "",
+    end_date: str = "",
+) -> tuple[str, list]:
+    """
+    Build a parameterized WHERE clause for sales queries.
+    """
+
+    clauses = []
+    params = []
+
+    if item.strip():
+        singular, plural = _item_variants(item)
+
+        clauses.append(
+            "LOWER(TRIM(item)) IN (?, ?)"
+        )
+        params.extend([singular, plural])
+
+    if start_date.strip():
+        clauses.append("date >= ?")
+        params.append(start_date.strip())
+
+    if end_date.strip():
+        clauses.append("date <= ?")
+        params.append(end_date.strip())
+
+    if not clauses:
+        return "", params
+
+    return " WHERE " + " AND ".join(clauses), params
+
+
+def _get_sales_history_for_role(
+    role: str,
+    item: str = "",
+    start_date: str = "",
+    end_date: str = "",
+) -> dict:
+    """
+    Retrieve historical sales after enforcing authorization.
+    """
+
+    if not _manager_authorized(role):
+        return {
+            "authorized": False,
+            "error": "not_authorized",
+            "message": (
+                "You are not authorized to access "
+                "historical sales information."
+            ),
+        }
+
+    where_clause, params = _build_sales_filters(
+        item=item,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    query = f"""
+        SELECT
+            date,
+            item,
+            SUM(count) AS units_sold,
+            SUM(total_price) AS revenue
+        FROM sales
+        {where_clause}
+        GROUP BY date, item
+        ORDER BY date ASC, item ASC
+    """
+
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+        return {
+            "authorized": True,
+            "records": [
+                {
+                    "date": row[0],
+                    "item": row[1],
+                    "units_sold": row[2],
+                    "revenue": row[3],
+                }
+                for row in rows
+            ],
+            "record_count": len(rows),
+        }
+
+    except sqlite3.Error as exc:
+        return {
+            "authorized": True,
+            "error": "database_error",
+            "message": str(exc),
+        }
+    
+# The Graph generation
+
+def _safe_filename(value: str) -> str:
+    value = value.strip().lower() or "all-sales"
+    return re.sub(r"[^a-z0-9_-]+", "-", value)
+
+def _create_sales_chart_for_role(
+    role: str,
+    item: str = "",
+    metric: str = "units_sold",
+) -> dict:
+    """
+    Generate a sales trend chart for an authorized user.
+    """
+
+    summary = _get_sales_summary_for_role(
+        role=role,
+        item=item,
+    )
+
+    if not summary.get("authorized"):
+        return summary
+
+    daily = summary.get("daily", [])
+
+    if not daily:
+        return {
+            "authorized": True,
+            "error": "no_data",
+            "message": "No sales data is available to graph.",
+        }
+
+    metric = metric.strip().lower()
+
+    if metric not in {"units_sold", "revenue"}:
+        return {
+            "authorized": True,
+            "error": "invalid_metric",
+            "message": (
+                "Metric must be 'units_sold' or 'revenue'."
+            ),
+        }
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    import matplotlib.pyplot as plt
+
+    dates = [row["date"] for row in daily]
+    values = [row[metric] for row in daily]
+
+    CHART_DIR.mkdir(parents=True, exist_ok=True)
+
+    item_slug = _safe_filename(item)
+
+    output_path = CHART_DIR / (
+        f"{item_slug}-{metric}.png"
+    )
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(dates, values, marker="o")
+
+    title_item = item.strip().title() if item.strip() else "All Sales"
+
+    plt.title(f"{title_item} — {metric.replace('_', ' ').title()}")
+    plt.xlabel("Date")
+
+    if metric == "revenue":
+        plt.ylabel("Revenue ($)")
+    else:
+        plt.ylabel("Units Sold")
+
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    plt.savefig(output_path)
+    plt.close()
+
+    return {
+        "authorized": True,
+        "chart_path": str(output_path),
+        "metric": metric,
+        "data_points": len(daily),
+    }
+
+@tool
+def create_sales_chart(
+    runtime: ToolRuntime[InsightContext],
+    item: str = "",
+    metric: str = "units_sold",
+) -> str:
+    """
+    Create a sales trend graph.
+
+    metric may be:
+    - units_sold
+    - revenue
+
+    Protected analytics authorization applies.
+    """
+
+    result = _create_sales_chart_for_role(
+        role=runtime.context.user_role,
+        item=item,
+        metric=metric,
+    )
+
+    return json.dumps(result)
 
 # Insight tools
 
@@ -129,106 +348,161 @@ def get_inventory_count(item: str) -> str:
 def get_sales_history(
     runtime: ToolRuntime[InsightContext],
     item: str = "",
+    start_date: str = "",
+    end_date: str = "",
 ) -> str:
     """
-    Retrieve historical sales information.
+    Retrieve protected historical sales information.
 
-    This tool contains protected business information and may only
-    be used by an authorized manager, owner, or administrator.
-
-    Optionally provide an item name to restrict the sales history
-    to one product.
+    Optional filters:
+    - product name
+    - start date
+    - end date
     """
 
-    role = runtime.context.user_role
+    result = _get_sales_history_for_role(
+        role=runtime.context.user_role,
+        item=item,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
-    # Deterministic authorization boundary.
-    # The LLM cant override this check.
+    return json.dumps(result)
+
+
+def _get_sales_summary_for_role(
+    role: str,
+    item: str = "",
+    start_date: str = "",
+    end_date: str = "",
+) -> dict:
+    """
+    Calculate deterministic sales analytics.
+    """
+
     if not _manager_authorized(role):
-        return json.dumps(
-            {
-                "authorized": False,
-                "error": "not_authorized",
-                "message": (
-                    "You are not authorized to access historical "
-                    "sales information."
-                ),
-            }
-        )
+        return {
+            "authorized": False,
+            "error": "not_authorized",
+            "message": (
+                "You are not authorized to access "
+                "historical sales analytics."
+            ),
+        }
+
+    where_clause, params = _build_sales_filters(
+        item=item,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
 
-            if item.strip():
-                singular, plural = _item_variants(item)
+            cursor.execute(
+                f"""
+                SELECT
+                    COALESCE(SUM(count), 0),
+                    COALESCE(SUM(total_price), 0)
+                FROM sales
+                {where_clause}
+                """,
+                params,
+            )
 
-                cursor.execute(
-                    """
-                    SELECT
-                        date,
-                        item,
-                        SUM(count) AS units_sold,
-                        SUM(total_price) AS revenue
-                    FROM sales
-                    WHERE LOWER(TRIM(item)) IN (?, ?)
-                    GROUP BY date, item
-                    ORDER BY date ASC
-                    """,
-                    (singular, plural),
-                )
+            total_units, total_revenue = cursor.fetchone()
 
-            else:
-                cursor.execute(
-                    """
-                    SELECT
-                        date,
-                        item,
-                        SUM(count) AS units_sold,
-                        SUM(total_price) AS revenue
-                    FROM sales
-                    GROUP BY date, item
-                    ORDER BY date ASC, item ASC
-                    """
-                )
+            cursor.execute(
+                f"""
+                SELECT
+                    item,
+                    SUM(count) AS units_sold,
+                    SUM(total_price) AS revenue
+                FROM sales
+                {where_clause}
+                GROUP BY item
+                ORDER BY units_sold DESC, revenue DESC
+                LIMIT 1
+                """,
+                params,
+            )
 
-            rows = cursor.fetchall()
+            top_row = cursor.fetchone()
 
-        sales = [
-            {
-                "date": row[0],
-                "item": row[1],
-                "units_sold": row[2],
-                "revenue": row[3],
+            cursor.execute(
+                f"""
+                SELECT
+                    date,
+                    SUM(count) AS units_sold,
+                    SUM(total_price) AS revenue
+                FROM sales
+                {where_clause}
+                GROUP BY date
+                ORDER BY date ASC
+                """,
+                params,
+            )
+
+            daily_rows = cursor.fetchall()
+
+        top_seller = None
+
+        if top_row:
+            top_seller = {
+                "item": top_row[0],
+                "units_sold": top_row[1],
+                "revenue": top_row[2],
             }
-            for row in rows
-        ]
 
-        return json.dumps(
-            {
-                "authorized": True,
-                "records": sales,
-                "record_count": len(sales),
-            }
-        )
+        return {
+            "authorized": True,
+            "total_units": int(total_units),
+            "total_revenue": float(total_revenue),
+            "top_seller": top_seller,
+            "daily": [
+                {
+                    "date": row[0],
+                    "units_sold": row[1],
+                    "revenue": row[2],
+                }
+                for row in daily_rows
+            ],
+        }
 
     except sqlite3.Error as exc:
-        return json.dumps(
-            {
-                "authorized": True,
-                "error": "database_error",
-                "message": str(exc),
-            }
-        )
+        return {
+            "authorized": True,
+            "error": "database_error",
+            "message": str(exc),
+        }
 
 
-# Insights Agent
+@tool
+def get_sales_summary(
+    runtime: ToolRuntime[InsightContext],
+    item: str = "",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
+    """
+    Calculate protected business analytics.
 
-llm = ChatOpenAI(
-    model="gpt-5-nano",
-    temperature=0,
-)
+    Use for questions such as:
+    - What was our total revenue?
+    - How many units did we sell?
+    - What was our top-selling product?
+    - How did sales perform over time?
+    """
 
+    result = _get_sales_summary_for_role(
+        role=runtime.context.user_role,
+        item=item,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return json.dumps(result)
 
 INSIGHT_SYSTEM_PROMPT = """
 You are the Business Insights Agent for EcommerceHelper.
@@ -236,7 +510,7 @@ You are the Business Insights Agent for EcommerceHelper.
 Your responsibility is to answer analytical and informational
 questions about inventory and sales.
 
-You have two primary capabilities:
+You have four primary capabilities:
 
 1. Inventory questions
    - Answer questions about how many units of an item are currently
@@ -251,6 +525,16 @@ You have two primary capabilities:
    - If the tool reports that access is not authorized, clearly tell
      the user that they are not authorized.
    - Never invent or estimate protected sales information.
+
+3. Business analytics
+   - Use get_sales_summary for totals, top sellers,
+     revenue, units sold, and sales trends.
+
+4. Graphs
+   - When an authorized user asks for a graph,
+     chart, visualization, or sales trend image,
+     use create_sales_chart.
+   - Never create protected charts for unauthorized users.
 
 Rules:
 
@@ -267,6 +551,8 @@ Insight_agent = create_agent(
     tools=[
         get_inventory_count,
         get_sales_history,
+        get_sales_summary,
+        create_sales_chart,
     ],
     context_schema=InsightContext,
     system_prompt=INSIGHT_SYSTEM_PROMPT,
@@ -304,3 +590,34 @@ if __name__ == "__main__":
 
     print("\nCUSTOMER SALES AUTHORIZATION TEST")
     print(customer_response["messages"][-1].content)
+
+    manager_sales_response = Insight_agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Show me the previous apple sales.",
+                }
+            ]
+        },
+        context=InsightContext(
+            user_role="manager"
+        ),
+        config={
+            "run_name": "insights-manager-sales",
+            "tags": [
+                "insights-agent",
+                "manager",
+                "sales-history",
+                "ollama",
+            ],
+            "metadata": {
+                "user_role": "manager",
+                "feature": "historical-sales",
+                "model_provider": "ollama",
+            },
+        },
+    )
+
+    print("\nMANAGER SALES HISTORY TEST")
+    print(manager_sales_response["messages"][-1].content)

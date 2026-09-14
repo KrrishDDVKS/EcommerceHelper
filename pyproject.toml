@@ -30,6 +30,7 @@ dependencies = [
     "langchain-mcp-adapters==0.2.2",
     "langchain-ollama==1.1.0",
     "langchain-openai>=1.6.2",
+    "matplotlib>=3.11.2",
     "langgraph-api==0.10.0",
     "langgraph-checkpoint-sqlite==3.1.0",
     "langgraph-cli==0.4.30",
@@ -54,7 +55,7 @@ dependencies = [
     "pyjwt==2.13.0",
     "pyperclip==1.11.0",
     "pytest>=9.1.1",
-    "pywin32==311",
+    "pywin32==311; sys_platform == 'win32'",
     "rich==15.0.0",
     "setuptools==82.0.1",
     "soupsieve==2.8.4",
@@ -72,3 +73,11 @@ dependencies = [
     "watchfiles==1.1.1",
     "zipp==3.23.0",
 ]
+[dependency-groups]
+dev = [
+    "langsmith[pytest]>=0.12.4",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

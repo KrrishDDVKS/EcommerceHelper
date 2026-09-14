@@ -1,6 +1,6 @@
 import sqlite3
 import streamlit as st
-from agents.Orchastrator import main_agent
+from agents.Orchastrator import EcommerceContext, main_agent
 
 if "reg_in" not in st.session_state:
     st.session_state["reg_in"] = False
@@ -148,7 +148,8 @@ def main():
     conn.commit()
     conn.close()
 
-    main_agent.invoke({"messages": [{"role": "user", "content": "I want to add 5 apples of $1.50."}]})
+    main_agent.invoke({"messages": [{"role": "user", "content": "I want to add 5 apples of $1.50."}]}, 
+                      context=EcommerceContext(user_role=st.session_state.get("role", "customer",)),)
 
 def logout():
     st.session_state["logged_in"] = False

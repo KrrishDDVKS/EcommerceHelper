@@ -1,1 +1,20 @@
+# Environment / secrets
 .env
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Testing / tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Generated charts
+charts/
+
+# macOS
+.DS_Store
